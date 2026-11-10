@@ -507,8 +507,11 @@ async function loadMails() {
     link.style.textDecoration = "none";
     head.appendChild(link);
     const minVersion = (m.audience && m.audience.min_version) || "";
+    const scheduled = m.published_at * 1000 > Date.now();
     head.insertAdjacentHTML("beforeend",
-      (m.revoked ? '<span class="tag">已撤回</span>' : '<span class="tag">生效中</span>') +
+      (m.revoked ? '<span class="tag">已撤回</span>'
+                 : (scheduled ? '<span class="tag">定时中 ' + fmtTime(m.published_at) + '</span>'
+                              : '<span class="tag">生效中</span>')) +
       '<span class="tag">' + m.read_count + ' 已读</span>' +
       '<span class="tag">' + m.claim_count + ' 领取</span>' +
       '<span class="tag">' + (minVersion ? minVersion + ' 及以上' : '全部版本') + '</span>');
