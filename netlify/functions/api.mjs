@@ -33,7 +33,7 @@ async function store() {
   if (MEMORY) return memoryStore;
   if (blobStore) return blobStore;
   const { getStore } = await import("@netlify/blobs");
-  blobStore = getStore({ name: "mail", consistency: "strong" });
+  blobStore = getStore({ name: "mail"});
   return blobStore;
 }
 
