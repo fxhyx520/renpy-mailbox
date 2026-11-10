@@ -194,6 +194,32 @@ async function receiptKey(device, mailId) {
   return "receipt:" + device + ":" + mailId;
 }
 
+// ---------------------------------------------------------------- 统计
+async function receiptStats() {
+  const s = await store();
+  const reads = {};
+  const claims = {};
+
+  let cursor;
+  for (;;) {
+    const page = await s.list({ prefix: "receipt:", cursor });
+    for (const blob of page.blobs) {
+      const parts = blob.key.split(":");
+      const mailId = parts[parts.length - 1];
+      reads[mailId] = (reads[mailId] || 0) + 1;
+
+      const record = await getJSON(blob.key);
+      if (record && record.claimed_at) {
+        claims[mailId] = (claims[mailId] || 0) + 1;
+      }
+    }
+    cursor = page.cursor;
+    if (!cursor) break;
+  }
+
+  return { reads, claims };
+}
+
 // ---------------------------------------------------------------- 页面
 function esc(text) {
   return String(text == null ? "" : text)
@@ -254,7 +280,8 @@ function card(mail) {
   const time = new Date(mail.published_at * 1000).toISOString().slice(0, 16).replace("T", " ");
   return '<article class="mail"><h1>' + esc(mail.title) + "</h1>" +
     (mail.revoked ? '<span class="flag">已撤回</span>' : "") +
-    '<div class="meta">' + esc(mail.sender || "") + " · " + time + " · 邮件 #" + mail.id + "</div>" +
+    '<div class="meta">' + esc(mail.sender || "") + " · " + time +
+    " · 已读 " + (mail.read_count || 0) + " · 邮件 #" + mail.id + "</div>" +
     blocksHtml(mail, false) + attachmentsHtml(mail) + "</article>";
 }
 
@@ -403,13 +430,16 @@ async function route(event) {
   if (path === "/admin/api/mails" && method === "GET") {
     requireAdmin(event);
     const index = await readIndex();
+    const stats = await receiptStats();
     return json(200, {
       ok: true,
       mails: index.map((m) => ({
         id: m.id, title: m.title, sender: m.sender, body: m.body,
         attachments: m.attachments || [], audience: m.audience || {},
         published_at: m.published_at, expires_at: m.expires_at || null,
-        revoked: Boolean(m.revoked), read_count: 0, claim_count: 0,
+        revoked: Boolean(m.revoked),
+        read_count: stats.reads[String(m.id)] || 0,
+        claim_count: stats.claims[String(m.id)] || 0,
       })),
     });
   }
@@ -484,8 +514,15 @@ async function route(event) {
     const index = await readIndex();
     const revoked = index.filter((m) => m.revoked);
 
-    const cards = mails.map((m) => card(m))
-      .concat(revoked.map((m) => card({ ...m, layout: [], attachments: [] })));
+    const stats = await receiptStats();
+
+    const withCounts = (m) => ({
+      ...m,
+      read_count: stats.reads[String(m.id)] || 0,
+    });
+
+    const cards = mails.map((m) => card(withCounts(m)))
+      .concat(revoked.map((m) => card(withCounts({ ...m, layout: [], attachments: [] }))));
     return html(page("全部邮件",
       (cards.length ? cards.join("") : '<article class="mail"><h2>还没有邮件</h2></article>')));
   }
