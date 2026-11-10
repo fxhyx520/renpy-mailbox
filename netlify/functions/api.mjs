@@ -501,9 +501,23 @@ async function route(event) {
 
 export async function handler(event) {
   try {
-    // Functions v1 不会自动注入 Blobs 环境，必须先连一次
+    // Functions v1（Lambda 兼容模式）不会自动注入 Blobs 环境，
+    // 必须在第一次 getStore 之前手动连一次，否则会抛 MissingBlobsEnvironmentError。
     if (!MEMORY) {
-      const { connectLambda } = await import("@netlify/blobs");
-      connectLambda(event);
+      try {
+        const { connectLambda } = await import("@netlify/blobs");
+        if (typeof connectLambda === "function") connectLambda(event);
+      } catch (e) {
+        // 已经不在 v1 环境时忽略
+      }
     }
+
     return await route(event);
+  } catch (error) {
+    if (error && error.status) {
+      return fail(error.status, error.code, error.code);
+    }
+    console.error(error);
+    return fail(500, "internal_error", String(error));
+  }
+}
