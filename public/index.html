@@ -86,6 +86,7 @@
 </header>
 
 <div class="stats">
+  <span>当前游戏版本<b id="s-version">-</b></span>
   <span>玩家<b id="s-players">-</b></span>
   <span>7 日活跃<b id="s-active">-</b></span>
   <span>邮件<b id="s-mails">-</b></span>
@@ -447,6 +448,7 @@ $("send").onclick = async () => {
 async function loadStats() {
   try {
     const d = await api("/admin/api/stats");
+    $("s-version").textContent = d.game_version || "—";
     $("s-players").textContent = d.players;
     $("s-active").textContent = d.active7 == null ? "—" : d.active7;
     $("s-mails").textContent = d.live_mails;
@@ -488,10 +490,12 @@ async function loadMails() {
     link.style.color = "inherit";
     link.style.textDecoration = "none";
     head.appendChild(link);
+    const minVersion = (m.audience && m.audience.min_version) || "";
     head.insertAdjacentHTML("beforeend",
       (m.revoked ? '<span class="tag">已撤回</span>' : '<span class="tag">生效中</span>') +
       '<span class="tag">' + m.read_count + ' 已读</span>' +
-      '<span class="tag">' + m.claim_count + ' 领取</span>');
+      '<span class="tag">' + m.claim_count + ' 领取</span>' +
+      '<span class="tag">' + (minVersion ? minVersion + ' 及以上' : '全部版本') + '</span>');
 
     const meta = document.createElement("div");
     meta.className = "hint";
