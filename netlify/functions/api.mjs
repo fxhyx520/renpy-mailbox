@@ -267,6 +267,53 @@ const PAGE_CSS = `
   .meta{font-size:13px;color:#7b7f8a;margin-bottom:18px}
   .flag{font-size:12px;color:#c0392b;border:1px solid #e6b0aa;border-radius:10px;padding:1px 8px;margin-left:6px}
   .back{display:inline-block;margin:6px 0 18px;color:#7b7f8a;font-size:13px;text-decoration:none}
+  .mail[data-revoked]{opacity:.72}
+  .retract{display:block;margin:18px 0 0 auto;background:transparent;border:1px solid #e0b4ae;
+           color:#c0392b;border-radius:8px;padding:5px 16px;font-size:13px;cursor:pointer}
+  .retract:hover{background:#fdf3f2}
+  .retract[disabled]{opacity:.5;cursor:default}
+  .topbar{display:flex;align-items:center;gap:12px;margin:6px 0 18px;font-size:13px;color:#7b7f8a}
+`;
+
+const RETRACT_SCRIPT = `
+<script>
+(function () {
+  var token = localStorage.getItem("mail_admin_token") || "";
+  var buttons = document.querySelectorAll("[data-retract]");
+
+  if (!token) {
+    buttons.forEach(function (b) { b.style.display = "none"; });
+    return;
+  }
+
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+
+      var id = button.getAttribute("data-retract");
+      if (!confirm("撤回邮件 #" + id + "？玩家将不再看到它。")) return;
+
+      button.disabled = true;
+      button.textContent = "撤回中…";
+
+      fetch("/admin/api/mails/" + id + "/retract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Token": token },
+        body: "{}"
+      }).then(function (response) {
+        return response.json();
+      }).then(function (data) {
+        if (!data.ok) throw new Error(data.detail || data.error || "失败");
+        location.reload();
+      }).catch(function (error) {
+        button.disabled = false;
+        button.textContent = "撤回";
+        alert("撤回失败：" + error.message);
+      });
+    });
+  });
+})();
+</script>
 `;
 
 function page(title, inner) {
@@ -277,12 +324,21 @@ function page(title, inner) {
 }
 
 function card(mail) {
-  const time = new Date(mail.published_at * 1000).toISOString().slice(0, 16).replace("T", " ");
-  return '<article class="mail"><h1>' + esc(mail.title) + "</h1>" +
+  // 函数跑在 UTC，页面上要显示北京时间
+  const time = new Date(mail.published_at * 1000).toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai", hour12: false,
+  }).replace(/\//g, "-").slice(0, 16);
+
+  const retract = mail.revoked
+    ? ""
+    : '<button class="retract" type="button" data-retract="' + mail.id + '">撤回</button>';
+
+  return '<article class="mail"' + (mail.revoked ? ' data-revoked="1"' : "") + ">" +
+    "<h1>" + esc(mail.title) + "</h1>" +
     (mail.revoked ? '<span class="flag">已撤回</span>' : "") +
     '<div class="meta">' + esc(mail.sender || "") + " · " + time +
     " · 已读 " + (mail.read_count || 0) + " · 邮件 #" + mail.id + "</div>" +
-    blocksHtml(mail, false) + attachmentsHtml(mail) + "</article>";
+    blocksHtml(mail, false) + attachmentsHtml(mail) + retract + "</article>";
 }
 
 // ---------------------------------------------------------------- 路由
@@ -523,8 +579,15 @@ async function route(event) {
 
     const cards = mails.map((m) => card(withCounts(m)))
       .concat(revoked.map((m) => card(withCounts({ ...m, layout: [], attachments: [] }))));
-    return html(page("全部邮件",
-      (cards.length ? cards.join("") : '<article class="mail"><h2>还没有邮件</h2></article>')));
+
+    const topbar = '<div class="topbar"><a class="back" style="margin:0" href="/">← 回到后台</a>' +
+      '<span>共 ' + cards.length + " 封</span></div>";
+
+    const body = cards.length
+      ? cards.join("")
+      : '<article class="mail"><h2>还没有邮件</h2><div class="meta">在后台发布后会出现在这里</div></article>';
+
+    return html(page("全部邮件", topbar + body + RETRACT_SCRIPT));
   }
 
   const pageMatch = path.match(/^\/mail\/(\d+)$/);
