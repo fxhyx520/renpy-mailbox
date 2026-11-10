@@ -501,12 +501,9 @@ async function route(event) {
 
 export async function handler(event) {
   try {
-    return await route(event);
-  } catch (error) {
-    if (error && error.status) {
-      return fail(error.status, error.code, error.code);
+    // Functions v1 不会自动注入 Blobs 环境，必须先连一次
+    if (!MEMORY) {
+      const { connectLambda } = await import("@netlify/blobs");
+      connectLambda(event);
     }
-    console.error(error);
-    return fail(500, "internal_error", String(error));
-  }
-}
+    return await route(event);
