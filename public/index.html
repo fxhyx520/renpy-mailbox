@@ -86,7 +86,7 @@
 </header>
 
 <div class="stats">
-  <span>当前游戏版本<b id="s-version">-</b></span>
+  <span>当前游戏版本<input id="game-version" placeholder="如 0.29" style="width:78px;padding:2px 6px;font-size:13px"></span>
   <span>玩家<b id="s-players">-</b></span>
   <span>7 日活跃<b id="s-active">-</b></span>
   <span>邮件<b id="s-mails">-</b></span>
@@ -176,6 +176,23 @@ let TOKEN = localStorage.getItem("mail_admin_token") || "";
 let blocks = [{ type: "text", text: "", size: 19, align: "left" }];
 
 if (TOKEN) $("token").value = TOKEN;
+
+/* ---------------- 当前游戏版本（自己填，记在本地） ---------------- */
+let GAME_VERSION = localStorage.getItem("mail_game_version") || "";
+
+$("game-version").value = GAME_VERSION;
+
+$("game-version").oninput = () => {
+  GAME_VERSION = $("game-version").value.trim();
+  localStorage.setItem("mail_game_version", GAME_VERSION);
+  fillMinVersion();
+};
+
+function fillMinVersion() {
+  if (GAME_VERSION && !$("f-minver").value.trim()) {
+    $("f-minver").value = GAME_VERSION;
+  }
+}
 
 function msg(text, ok) {
   const el = $("msg");
@@ -448,7 +465,6 @@ $("send").onclick = async () => {
 async function loadStats() {
   try {
     const d = await api("/admin/api/stats");
-    $("s-version").textContent = d.game_version || "—";
     $("s-players").textContent = d.players;
     $("s-active").textContent = d.active7 == null ? "—" : d.active7;
     $("s-mails").textContent = d.live_mails;
@@ -574,6 +590,7 @@ $("connect").onclick = async () => {
   try {
     await api("/admin/api/stats");
     msg("已连接。", true);
+    fillMinVersion();
     loadStats();
     loadMails();
   } catch (e) { msg("连接失败：" + e.message, false); }
