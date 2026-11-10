@@ -179,6 +179,15 @@ async function loadActiveMails(player) {
   return result;
 }
 
+async function loadAllMails() {
+  // /mails 页面要看到「全部已发布」，所以不按版本/平台过滤
+  const index = await readIndex();
+  const ts = now();
+  return index
+    .filter((m) => !m.revoked && m.published_at <= ts && (!m.expires_at || m.expires_at > ts))
+    .sort((a, b) => b.published_at - a.published_at || b.id - a.id);
+}
+
 async function receiptsOf(device) {
   const s = await store();
   const { blobs } = await s.list({ prefix: "receipt:" + device + ":" });
@@ -352,8 +361,12 @@ function card(mail, collapsible) {
 
   const revoked = mail.revoked ? ' data-revoked="1"' : "";
   const flag = mail.revoked ? '<span class="flag">已撤回</span>' : "";
+  const minVersion = (mail.audience && mail.audience.min_version) || "";
+  const versionTag = minVersion ? minVersion + "+" : "全部版本";
+
   const meta = '<div class="meta">' + esc(mail.sender || "") + " · " + time +
-    " · 已读 " + (mail.read_count || 0) + " · 邮件 #" + mail.id + "</div>";
+    " · 已读 " + (mail.read_count || 0) + " · 适用 " + esc(versionTag) +
+    " · 邮件 #" + mail.id + "</div>";
 
   // 单封详情页：直接摊开
   if (!collapsible) {
@@ -402,6 +415,11 @@ async function route(event) {
       };
       await setJSON("player:" + device, player);
       await setJSON("token:" + token, device);
+    }
+
+    // 记下玩家上报的版本，后台用来显示「当前游戏版本」
+    if (player.game_version) {
+      await setJSON("meta/version", { version: player.game_version, at: ts });
     }
 
     return json(200, {
@@ -501,8 +519,15 @@ async function route(event) {
       players = 0;
     }
 
+    let gameVersion = "";
+    try {
+      const meta = await getJSON("meta/version");
+      gameVersion = (meta && meta.version) || "";
+    } catch (e) {}
+
     return json(200, {
       ok: true,
+      game_version: gameVersion,
       players,
       active7: null,
       mails: index.length,
@@ -595,8 +620,7 @@ async function route(event) {
 
   // ---------------- 网页版 ----------------
   if (path === "/mails" && method === "GET") {
-    const player = { game_version: "", platform: "" };
-    const mails = await loadActiveMails(player);
+    const mails = await loadAllMails();
     const index = await readIndex();
     const revoked = index.filter((m) => m.revoked);
 
