@@ -1,0 +1,32 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# 把 /v1/* 和 /admin/api/* 转给同一个函数，函数里按 route 分发
+[[redirects]]
+  from = "/v1/*"
+  to = "/.netlify/functions/api?route=/v1/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/admin/api/*"
+  to = "/.netlify/functions/api?route=/admin/api/:splat"
+  status = 200
+  force = true
+
+# 邮件网页版
+[[redirects]]
+  from = "/mail/*"
+  to = "/.netlify/functions/api?route=/mail/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/mails"
+  to = "/.netlify/functions/api?route=/mails"
+  status = 200
+  force = true
