@@ -562,10 +562,6 @@ async function doSync(kind) {
   }
 }
 
-$("sync-pull").onclick = () => doSync("pull");
-$("sync-push").onclick = () => doSync("push");
-$("sync-both").onclick = () => doSync("both");
-
 $("open-all").onclick = () => window.open("/mails", "_blank");
 
 $("connect").onclick = async () => {
