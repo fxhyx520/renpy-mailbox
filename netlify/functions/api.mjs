@@ -267,6 +267,23 @@ const PAGE_CSS = `
   .meta{font-size:13px;color:#7b7f8a;margin-bottom:18px}
   .flag{font-size:12px;color:#c0392b;border:1px solid #e6b0aa;border-radius:10px;padding:1px 8px;margin-left:6px}
   .back{display:inline-block;margin:6px 0 18px;color:#7b7f8a;font-size:13px;text-decoration:none}
+
+  .wrap.wide{max-width:1420px}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;margin-top:6px}
+  .grid .mail{margin-bottom:0}
+
+  .mail details summary{display:block;cursor:pointer;list-style:none}
+  .mail .row1{display:flex;align-items:center;gap:8px}
+  .mail details summary::-webkit-details-marker{display:none}
+  .mail .tt{font-size:18px;font-weight:600;color:#22262e;word-break:break-all}
+  .mail .arrow{margin-left:auto;color:#b9bcc4;font-size:12px;transition:transform .15s}
+  .mail details[open] .arrow{transform:rotate(90deg)}
+  .mail .meta{margin:6px 0 0;line-height:1.5}
+  .mail .body{margin-top:14px;font-size:15px}
+
+  @media (max-width:1200px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;gap:10px} }
+
   .mail[data-revoked]{opacity:.72}
   .retract{display:block;margin:18px 0 0 auto;background:transparent;border:1px solid #e0b4ae;
            color:#c0392b;border-radius:8px;padding:5px 16px;font-size:13px;cursor:pointer}
@@ -316,14 +333,14 @@ const RETRACT_SCRIPT = `
 </script>
 `;
 
-function page(title, inner) {
+function page(title, inner, wide) {
   return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     "<title>" + esc(title) + "</title><style>" + PAGE_CSS + "</style></head><body>" +
-    '<div class="wrap">' + inner + "</div></body></html>";
+    '<div class="wrap' + (wide ? " wide" : "") + '">' + inner + "</div></body></html>";
 }
 
-function card(mail) {
+function card(mail, collapsible) {
   // 函数跑在 UTC，页面上要显示北京时间
   const time = new Date(mail.published_at * 1000).toLocaleString("zh-CN", {
     timeZone: "Asia/Shanghai", hour12: false,
@@ -333,12 +350,25 @@ function card(mail) {
     ? ""
     : '<button class="retract" type="button" data-retract="' + mail.id + '">撤回</button>';
 
-  return '<article class="mail"' + (mail.revoked ? ' data-revoked="1"' : "") + ">" +
-    "<h1>" + esc(mail.title) + "</h1>" +
-    (mail.revoked ? '<span class="flag">已撤回</span>' : "") +
-    '<div class="meta">' + esc(mail.sender || "") + " · " + time +
-    " · 已读 " + (mail.read_count || 0) + " · 邮件 #" + mail.id + "</div>" +
-    blocksHtml(mail, false) + attachmentsHtml(mail) + retract + "</article>";
+  const revoked = mail.revoked ? ' data-revoked="1"' : "";
+  const flag = mail.revoked ? '<span class="flag">已撤回</span>' : "";
+  const meta = '<div class="meta">' + esc(mail.sender || "") + " · " + time +
+    " · 已读 " + (mail.read_count || 0) + " · 邮件 #" + mail.id + "</div>";
+
+  // 单封详情页：直接摊开
+  if (!collapsible) {
+    return "<article class=\"mail\"" + revoked + "><h1>" + esc(mail.title) + "</h1>" +
+      flag + meta + blocksHtml(mail, false) + attachmentsHtml(mail) + "</article>";
+  }
+
+  // 列表页：默认折叠，点标题展开
+  return "<article class=\"mail\"" + revoked + ">" +
+    "<details><summary>" +
+    '<div class="row1"><span class="tt">' + esc(mail.title) + "</span>" + flag +
+    '<span class="arrow">▸</span></div>' + meta +
+    "</summary>" +
+    '<div class="body">' + blocksHtml(mail, true) + attachmentsHtml(mail) + "</div>" +
+    "</details>" + retract + "</article>";
 }
 
 // ---------------------------------------------------------------- 路由
@@ -577,17 +607,17 @@ async function route(event) {
       read_count: stats.reads[String(m.id)] || 0,
     });
 
-    const cards = mails.map((m) => card(withCounts(m)))
-      .concat(revoked.map((m) => card(withCounts({ ...m, layout: [], attachments: [] }))));
+    const cards = mails.map((m) => card(withCounts(m), true))
+      .concat(revoked.map((m) => card(withCounts({ ...m, layout: [], attachments: [] }), true)));
 
     const topbar = '<div class="topbar"><a class="back" style="margin:0" href="/">← 回到后台</a>' +
       '<span>共 ' + cards.length + " 封</span></div>";
 
     const body = cards.length
-      ? cards.join("")
+      ? '<div class="grid">' + cards.join("") + "</div>"
       : '<article class="mail"><h2>还没有邮件</h2><div class="meta">在后台发布后会出现在这里</div></article>';
 
-    return html(page("全部邮件", topbar + body + RETRACT_SCRIPT));
+    return html(page("全部邮件", topbar + body + RETRACT_SCRIPT, true));
   }
 
   const pageMatch = path.match(/^\/mail\/(\d+)$/);
