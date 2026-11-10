@@ -540,7 +540,8 @@ async function route(event) {
 
   if (path === "/admin/api/mails" && method === "GET") {
     requireAdmin(event);
-    const index = await readIndex();
+    const index = (await readIndex()).slice()
+      .sort((a, b) => b.published_at - a.published_at || b.id - a.id);
     const stats = await receiptStats();
     return json(200, {
       ok: true,
