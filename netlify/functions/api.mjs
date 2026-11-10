@@ -27,14 +27,18 @@ const memoryStore = {
   },
 };
 
-let blobStore = null;
-
 async function store() {
   if (MEMORY) return memoryStore;
-  if (blobStore) return blobStore;
+
+  // 绝对不能缓存这个 store 对象：
+  // 它是带着「本次调用」的 Blobs 令牌创建的，而令牌会过期。
+  // 一旦缓存下来，热实例下次复用就会报 Failed to decode token: Token expired。
+  // 每次请求重新取一次，开销可以忽略。
   const { getStore } = await import("@netlify/blobs");
-  blobStore = getStore({ name: "mail"});
-  return blobStore;
+
+  // Lambda 兼容模式没有 uncachedEdgeURL，只能用默认（eventual）一致性；
+  // 强一致性会抛 BlobsConsistencyError。
+  return getStore({ name: "mail" });
 }
 
 async function getJSON(key) {
