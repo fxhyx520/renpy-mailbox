@@ -110,6 +110,27 @@ function version(text) {
   return parts.slice(0, 3);
 }
 
+// 页面上的时间都是北京时间，而函数跑在 UTC，
+// 直接用 new Date("2026-11-11 02:30") 会被当成 UTC（差 8 小时），所以手动解析。
+function parseBeijingTime(text) {
+  const value = String(text || "").trim();
+  if (!value) return null;
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const match = value.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+
+  if (match) {
+    const iso = match[1] + "-" + pad(match[2]) + "-" + pad(match[3]) +
+      "T" + pad(match[4] || 0) + ":" + (match[5] || "00") + ":" + (match[6] || "00") + "+08:00";
+    const parsed = Date.parse(iso);
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+  }
+
+  const fallback = Date.parse(value);
+  return Number.isFinite(fallback) ? Math.floor(fallback / 1000) : null;
+}
+
 function audienceOk(audience, player) {
   if (!audience || !Object.keys(audience).length) return true;
   if (audience.platform && player.platform &&
@@ -180,11 +201,12 @@ async function loadActiveMails(player) {
 }
 
 async function loadAllMails() {
-  // /mails 页面要看到「全部已发布」，所以不按版本/平台过滤
+  // /mails 页面要看到「全部已发布」，所以不按版本/平台过滤，
+  // 连还没到时间的定时邮件也列出来（卡片上会标「定时」）
   const index = await readIndex();
   const ts = now();
   return index
-    .filter((m) => !m.revoked && m.published_at <= ts && (!m.expires_at || m.expires_at > ts))
+    .filter((m) => !m.revoked && (!m.expires_at || m.expires_at > ts))
     .sort((a, b) => b.published_at - a.published_at || b.id - a.id);
 }
 
@@ -359,8 +381,12 @@ function card(mail, collapsible) {
     ? ""
     : '<button class="retract" type="button" data-retract="' + mail.id + '">撤回</button>';
 
+  const scheduled = mail.published_at * 1000 > Date.now();
+
   const revoked = mail.revoked ? ' data-revoked="1"' : "";
-  const flag = mail.revoked ? '<span class="flag">已撤回</span>' : "";
+  const flag = mail.revoked
+    ? '<span class="flag">已撤回</span>'
+    : (scheduled ? '<span class="flag">定时 ' + time + "</span>" : "");
   const minVersion = (mail.audience && mail.audience.min_version) || "";
   const versionTag = minVersion ? minVersion + "+" : "全部版本";
 
@@ -571,8 +597,8 @@ async function route(event) {
       layout: Array.isArray(body.blocks) ? body.blocks : [],
       attachments: Array.isArray(body.attachments) ? body.attachments : [],
       audience: body.audience && typeof body.audience === "object" ? body.audience : {},
-      published_at: body.publish_at ? Math.floor(new Date(body.publish_at).getTime() / 1000) : ts,
-      expires_at: body.expires_at ? Math.floor(new Date(body.expires_at).getTime() / 1000) : null,
+      published_at: parseBeijingTime(body.publish_at) || ts,
+      expires_at: parseBeijingTime(body.expires_at),
       revoked: false,
       created_at: ts,
       updated_at: ts,
