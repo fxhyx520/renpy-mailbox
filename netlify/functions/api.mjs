@@ -530,6 +530,23 @@ async function route(event) {
     return json(200, { ok: true, read_at: ts });
   }
 
+  // ---------------- 版本更新（公开读取） ----------------
+  if (path === "/v1/version" && method === "GET") {
+    let info = {};
+    try {
+      info = (await getJSON("meta/update")) || {};
+    } catch (e) {}
+
+    return json(200, {
+      ok: true,
+      latest: info.latest || "",
+      notes: info.notes || "",
+      url: info.url || "",
+      force: Boolean(info.force),
+      updated_at: info.updated_at || null,
+    });
+  }
+
   // ---------------- 管理接口 ----------------
   if (path === "/admin/api/stats" && method === "GET") {
     requireAdmin(event);
@@ -562,6 +579,21 @@ async function route(event) {
       uptime: 0,
       server_time: now(),
     });
+  }
+
+  if (path === "/admin/api/version" && method === "POST") {
+    requireAdmin(event);
+
+    const info = {
+      latest: String(body.latest || "").trim().slice(0, 24),
+      notes: String(body.notes || "").slice(0, 3000),
+      url: String(body.url || "").trim().slice(0, 500),
+      force: Boolean(body.force),
+      updated_at: now(),
+    };
+
+    await setJSON("meta/update", info);
+    return json(200, Object.assign({ ok: true }, info));
   }
 
   if (path === "/admin/api/mails" && method === "GET") {
