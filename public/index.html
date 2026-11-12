@@ -135,6 +135,24 @@
     <div id="latest"><div class="hint">还没有邮件。</div></div>
     <button class="ghost" id="open-all" style="width:100%;margin-top:10px">展开全部 →</button>
   </section>
+
+  <section class="panel">
+    <h2>版本更新提示</h2>
+    <div class="hint" style="margin-bottom:10px">
+      游戏启动时会来查这里的版本号，比玩家本地高就弹窗。<br>
+      「最新版本」留空 = 关闭这个功能。
+    </div>
+    <div class="field"><label>最新版本</label><input id="u-latest" placeholder="0.30"></div>
+    <div class="field"><label>更新说明（每行一条）</label>
+      <textarea id="u-notes" rows="5" placeholder="1. 新增主线剧情第三章&#10;2. 修复存档崩溃"></textarea>
+    </div>
+    <div class="field"><label>更新链接</label><input id="u-url" placeholder="https://..."></div>
+    <label class="hint" style="display:flex;align-items:center;gap:8px;margin:8px 0">
+      <input type="checkbox" id="u-force" style="width:auto"> 强制更新（不显示「以后再说」）
+    </label>
+    <button id="u-save">保存</button>
+    <div class="msg" id="u-msg"></div>
+  </section>
   </div>
 
   <div>
@@ -539,6 +557,39 @@ async function loadMails() {
   } catch (e) {}
 }
 
+/* ---------------- 版本更新提示 ---------------- */
+
+async function loadUpdate() {
+  try {
+    const response = await fetch("/v1/version");
+    const d = await response.json();
+    $("u-latest").value = d.latest || "";
+    $("u-notes").value = d.notes || "";
+    $("u-url").value = d.url || "";
+    $("u-force").checked = Boolean(d.force);
+  } catch (e) {}
+}
+
+$("u-save").onclick = async () => {
+  const box = $("u-msg");
+  try {
+    await api("/admin/api/version", {
+      method: "POST",
+      body: JSON.stringify({
+        latest: $("u-latest").value.trim(),
+        notes: $("u-notes").value,
+        url: $("u-url").value.trim(),
+        force: $("u-force").checked
+      })
+    });
+    box.textContent = "已保存。游戏下次启动就会检查到。";
+    box.className = "msg ok";
+  } catch (e) {
+    box.textContent = "保存失败：" + e.message;
+    box.className = "msg bad";
+  }
+};
+
 /* ---------------- 两台机器合并 ---------------- */
 
 function syncMsg(text, ok) {
@@ -596,6 +647,7 @@ $("connect").onclick = async () => {
     fillMinVersion();
     loadStats();
     loadMails();
+    loadUpdate();
   } catch (e) { msg("连接失败：" + e.message, false); }
 };
 
